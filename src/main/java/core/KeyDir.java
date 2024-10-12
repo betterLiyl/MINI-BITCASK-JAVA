@@ -36,10 +36,10 @@ public class KeyDir {
         });
     }
 
-    public static void put(char[] key, Long offset, Integer length) {
+    public static void put(byte[] key, Long offset, Integer length) {
         LOCK.lock();
         try {
-            ENGINE.put(transferKey(key), new ValueEntry(offset, length));
+            ENGINE.put(key, new ValueEntry(offset, length));
         } finally {
             if (LOCK.isHeldByCurrentThread()) {
                 LOCK.unlock();
@@ -47,15 +47,19 @@ public class KeyDir {
         }
     }
 
-    public static void remove(char[] key) {
+    public static void remove(byte[] key) {
         LOCK.lock();
         try {
-            ENGINE.remove(transferKey(key));
+            ENGINE.remove(key);
         } finally {
             if (LOCK.isHeldByCurrentThread()) {
                 LOCK.unlock();
             }
         }
+    }
+    public static void printAll() {
+        System.out.println("ENGINE size: " + ENGINE.size());
+        ENGINE.keySet().forEach(key -> System.out.println(new String(key)));
     }
 
     public static byte[] transferKey(char[] key) {

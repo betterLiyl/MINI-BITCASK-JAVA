@@ -34,22 +34,30 @@ public class Log {
     }
 
     public Log(String path) {
-        File oldFile = new File(path);
+        String pathname = path + "." + Constant.MERGE_FILE_EXT;
+        File oldFile = new File(pathname);
         if (oldFile.exists()) {
-            oldFile.delete();
-        }
+            if (oldFile.isDirectory()) {
+                oldFile.delete();
+            } else {
+                this.setFile(oldFile);
+                this.setPath(pathname);
+            }
+        } else {
 
-        try {
-            File tempFile = File.createTempFile(path, Constant.MERGE_FILE_EXT);
+            try {
 
-            tempFile.setReadable(true);
-            tempFile.setWritable(true);
+                File tempFile = new File(pathname);
 
-            this.setPath(tempFile.getAbsolutePath());
-            this.setFile(tempFile);
+                tempFile.setReadable(true);
+                tempFile.setWritable(true);
 
-        } catch (IOException e) {
-            e.printStackTrace();
+                this.setPath(tempFile.getAbsolutePath());
+                this.setFile(tempFile);
+
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
         }
 
     }
@@ -61,12 +69,12 @@ public class Log {
 
         long length = this.file.length();
         long pos = 0;
-
-        try (BufferedReader reader = new BufferedReader(new FileReader(this.file))) {
+//        try (BufferedInputStream reader = new BufferedInputStream(new FileInputStream(this.file))) {
+        try (RandomAccessFile reader = new RandomAccessFile(this.file, "r")) {
             while (pos < length) {
-                char[] lenBuf = {};
-
-                int read = reader.read(lenBuf, (int) pos, bitLen);
+                byte[] lenBuf = new byte[bitLen];
+                reader.seek(pos);
+                int read = reader.read(lenBuf, 0, bitLen);
                 //二进制转十进制
                 //key len
                 int keyLen = Integer.parseInt(new String(lenBuf), 2);
@@ -78,13 +86,14 @@ public class Log {
                 //重置为空
 //                lenBuf = new char[]{};
 
-                reader.read(lenBuf, (int) pos + bitLen, bitLen);
+                reader.read(lenBuf, 0, bitLen);
                 //value len
                 int valLen = Integer.parseInt(new String(lenBuf), 2);
                 //value的offset
                 long valPos = pos + bitLen * 2 + keyLen;
                 //key 内容
-                reader.read(lenBuf, (int) pos + bitLen * 2, keyLen);
+                lenBuf = new byte[keyLen];
+                reader.read(lenBuf, 0, keyLen);
 
                 if (valLen == -1 || valLen == 0) {
                     KeyDir.remove(lenBuf);
@@ -97,16 +106,19 @@ public class Log {
         } catch (Exception e) {
             e.printStackTrace();
         }
+        System.out.println("加载索引完成---");
+        KeyDir.printAll();
     }
 
     /**
      * 根据值偏移量，读取值
      */
     public byte[] readValue(long valOffset, long valLen) {
-        try (BufferedReader reader = new BufferedReader(new FileReader(this.file))) {
-            char[] buff = {};
-            reader.read(buff, (int) valOffset, (int) valLen);
-            return KeyDir.transferKey(buff);
+        try (RandomAccessFile raf = new RandomAccessFile(this.file, "r")) {
+            raf.seek(valOffset);
+            byte[] buff = new byte[(int) valLen];
+            raf.read(buff, 0, (int) valLen);
+            return buff;
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -116,16 +128,37 @@ public class Log {
     // +-------------+-------------+----------------+----------------+
     // | key len(4)    val len(4)     key(varint)       val(varint)  |
     // +-------------+-------------+----------------+----------------+
-    public void write(char[] key, char[] val) {
-        int leyLen = key.length;
+    public KeyDir.ValueEntry write(byte[] key, byte[] val) {
+        int keyLen = key.length;
         int valLen = val.length;
-        int total = Constant.KEY_VAL_HEADER_LEN * 2 + leyLen + valLen;
-        try (BufferedWriter bufferedWriter = new BufferedWriter(new FileWriter(this.file))) {
-//            bufferedWriter.append();
+        long offset = this.file.length();
+        int totalLen = keyLen + valLen + Constant.KEY_VAL_HEADER_LEN * 2;
+        try (BufferedOutputStream writer = new BufferedOutputStream(new FileOutputStream(this.file, true))) {
+            writer.write(toFixedBinary(keyLen, Constant.KEY_VAL_HEADER_LEN).getBytes());
+            writer.write(toFixedBinary(valLen, Constant.KEY_VAL_HEADER_LEN).getBytes());
+            writer.write(key);
+            writer.write(val);
+            writer.flush();
+            //传参数
+            return new KeyDir.ValueEntry(offset, totalLen);
         } catch (Exception e) {
             e.printStackTrace();
         }
+        return null;
     }
 
+    public static String toFixedBinary(int number, int bitLength) {
+        // 使用 Integer.toBinaryString() 转换为二进制，并使用 String.format 补齐位数
+        String binaryString = Integer.toBinaryString(number);
+
+        // 确保固定位数，如果不足则前面补0
+        if (binaryString.length() > bitLength) {
+            // 如果超出bit位数，截断超出的部分
+            return binaryString.substring(binaryString.length() - bitLength);
+        } else {
+            // 如果不足，前面补0
+            return String.format("%" + bitLength + "s", binaryString).replace(' ', '0');
+        }
+    }
 
 }

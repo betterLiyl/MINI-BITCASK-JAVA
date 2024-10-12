@@ -9,5 +9,5 @@ public class Constant {
 
     public static final int KEY_VAL_HEADER_LEN = 4;
     public static final String MERGE_FILE_PREFIX = "minibitcask";
-    public static final String MERGE_FILE_EXT = "merge";
+    public static final String MERGE_FILE_EXT = "log";
 }
