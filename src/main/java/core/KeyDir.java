@@ -1,9 +1,9 @@
 package core;
 
 import java.nio.charset.StandardCharsets;
-import java.util.SortedMap;
-import java.util.TreeMap;
+import java.util.*;
 import java.util.concurrent.locks.ReentrantLock;
+import java.util.stream.Collectors;
 
 /**
  * @Author: liyanlong
@@ -20,7 +20,11 @@ public class KeyDir {
     private static final ReentrantLock LOCK = new ReentrantLock();
 
     public static void init() {
-        ENGINE = new TreeMap<>((b1, b2) -> {
+        ENGINE = initMap();
+    }
+
+    public static TreeMap<byte[], ValueEntry> initMap() {
+        return new TreeMap<>((b1, b2) -> {
             // 先比较长度
             if (b1.length != b2.length) {
                 return Integer.compare(b1.length, b2.length);
@@ -57,6 +61,7 @@ public class KeyDir {
             }
         }
     }
+
     public static void printAll() {
         System.out.println("ENGINE size: " + ENGINE.size());
         ENGINE.keySet().forEach(key -> System.out.println(new String(key)));
@@ -94,4 +99,87 @@ public class KeyDir {
         public ValueEntry() {
         }
     }
+
+    public static <T> ScanIter scan(Bound<T> bound, Log log) {
+        final SortedMap<byte[], ValueEntry> range = KeyDir.initMap();
+//        ENGINE.subMap()
+        ENGINE.entrySet().stream()
+                .filter(entry -> {
+                    byte[] key = entry.getKey();
+                    String kStr = new String(key);
+                    boolean b = bound.from.include ? kStr.compareTo((String) bound.from.value) >= 0 : kStr.compareTo((String) bound.from.value) > 0;
+                    boolean b1 = bound.to.include ? kStr.compareTo((String) bound.to.value) <= 0 : kStr.compareTo((String) bound.to.value) < 0;
+                    return b && b1;
+                })
+                .forEach(entry -> range.put(entry.getKey(), entry.getValue()));
+        return new ScanIter(log, range);
+    }
+
+    public static class Bound<T> {
+        private Boundary<T> from;
+        private Boundary<T> to;
+
+        public Boundary<T> include(T value) {
+            return new Boundary<>(value, true);
+        }
+
+        public Boundary<T> exclude(T value) {
+            return new Boundary<>(value, false);
+        }
+
+
+        public Bound(Boundary<T> from, Boundary<T> to) {
+            this.from = from;
+            this.to = to;
+        }
+
+        public Bound() {
+        }
+
+        public Boundary<T> getFrom() {
+            return from;
+        }
+
+        public void setFrom(Boundary<T> from) {
+            this.from = from;
+        }
+
+        public Boundary<T> getTo() {
+            return to;
+        }
+
+        public void setTo(Boundary<T> to) {
+            this.to = to;
+        }
+    }
+
+    public static class Boundary<T> {
+        private T value;
+        private boolean include;
+
+        public Boundary(T value, boolean include) {
+            this.value = value;
+            this.include = include;
+        }
+
+        public Boundary() {
+        }
+
+        public T getValue() {
+            return value;
+        }
+
+        public void setValue(T value) {
+            this.value = value;
+        }
+
+        public boolean isInclude() {
+            return include;
+        }
+
+        public void setInclude(boolean include) {
+            this.include = include;
+        }
+    }
+
 }
